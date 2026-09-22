@@ -19,6 +19,30 @@ import {
 
 import api from "../services/api";
 
+const normalizeUrl = (value, fallback) => {
+  const candidate = value || fallback;
+
+  try {
+    const url = new URL(candidate);
+    return url.href;
+  } catch {
+    return fallback;
+  }
+};
+
+const publicPortfolioUrl = normalizeUrl(
+  import.meta.env.VITE_PUBLIC_PORTFOLIO_URL,
+  "http://localhost:5174/"
+);
+
+const getPreviewHost = (url) => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "localhost:5174";
+  }
+};
+
 function Dashboard() {
   const navigate = useNavigate();
 
@@ -44,7 +68,8 @@ function Dashboard() {
      PORTFOLIO PREVIEW
      ========================================================= */
 
-  const portfolioUrl = "http://localhost:5174/";
+  const portfolioUrl = publicPortfolioUrl;
+  const portfolioHost = getPreviewHost(portfolioUrl);
 
   const handleViewPortfolio = () => {
     window.open(
@@ -58,6 +83,16 @@ function Dashboard() {
     setIframeKey((current) => current + 1);
   };
 
+  const activateFromKeyboard = (event, action) => {
+    if (
+      event.key === "Enter" ||
+      event.key === " "
+    ) {
+      event.preventDefault();
+      action();
+    }
+  };
+
   /* =========================================================
      DASHBOARD DATA
      ========================================================= */
@@ -69,7 +104,7 @@ function Dashboard() {
         setAnalyticsError(false);
 
         const results = await Promise.allSettled([
-          api.get("/projects"),
+          api.get("/projects/all"),
           api.get("/skills/all"),
           api.get("/messages"),
           api.get("/visits/stats"),
@@ -155,11 +190,6 @@ function Dashboard() {
         ) {
           const visits =
             visitsResult.value.data || {};
-
-          console.log(
-            "VISITS ANALYTICS:",
-            visits
-          );
 
           setAnalytics({
             totalViews:
@@ -487,10 +517,24 @@ function Dashboard() {
                     : ""
                 }`}
                 key={stat.title}
+                role={stat.path ? "button" : undefined}
+                tabIndex={stat.path ? 0 : undefined}
+                aria-label={
+                  stat.path
+                    ? `Open ${stat.title}`
+                    : undefined
+                }
                 onClick={() => {
                   if (stat.path) {
                     navigate(
                       stat.path
+                    );
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (stat.path) {
+                    activateFromKeyboard(event, () =>
+                      navigate(stat.path)
                     );
                   }
                 }}
@@ -609,7 +653,10 @@ function Dashboard() {
 
           <div className="live-preview-browser-bar">
 
-            <div className="preview-window-controls">
+            <div
+              className="preview-window-controls"
+              aria-hidden="true"
+            >
               <span />
               <span />
               <span />
@@ -617,11 +664,14 @@ function Dashboard() {
 
             <div className="preview-url">
 
-              <span className="preview-lock">
+              <span
+                className="preview-lock"
+                aria-hidden="true"
+              >
                 ●
               </span>
 
-              localhost:5174
+              {portfolioHost}
 
             </div>
 
@@ -1407,6 +1457,7 @@ function Dashboard() {
                     <button
                       className="icon-button project-open-button"
                       title="Open projects"
+                      aria-label="Open projects"
                       onClick={() =>
                         navigate(
                           "/projects"
@@ -1506,12 +1557,22 @@ function Dashboard() {
                         : ""
                     }`}
                     key={message._id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open message from ${
+                      message.name || "sender"
+                    }`}
                     style={{
                       "--item-delay": `${index * 45}ms`,
                     }}
                     onClick={() =>
                       navigate(
                         "/messages"
+                      )
+                    }
+                    onKeyDown={(event) =>
+                      activateFromKeyboard(event, () =>
+                        navigate("/messages")
                       )
                     }
                   >

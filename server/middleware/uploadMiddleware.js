@@ -3,6 +3,23 @@ const multer = require("multer");
 
 const storage = multer.memoryStorage();
 
+const allowedImages = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+];
+
+const imageFields = {
+  image: "Project image",
+  profileImage: "Profile image",
+};
+
+const rejectUpload = (message) => {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+};
+
 const upload = multer({
   storage,
 
@@ -11,21 +28,14 @@ const upload = multer({
   },
 
   fileFilter: (req, file, cb) => {
-    // Profile image
-    if (file.fieldname === "profileImage") {
-      const allowedImages = [
-        "image/jpeg",
-        "image/png",
-        "image/webp",
-      ];
-
+    if (imageFields[file.fieldname]) {
       if (allowedImages.includes(file.mimetype)) {
         return cb(null, true);
       }
 
       return cb(
-        new Error(
-          "Profile image must be JPG, PNG or WEBP."
+        rejectUpload(
+          `${imageFields[file.fieldname]} must be JPG, PNG or WEBP.`
         )
       );
     }
@@ -37,12 +47,12 @@ const upload = multer({
       }
 
       return cb(
-        new Error("Resume must be a PDF file.")
+        rejectUpload("Resume must be a PDF file.")
       );
     }
 
     return cb(
-      new Error("Unsupported file upload field.")
+      rejectUpload("Unsupported file upload field.")
     );
   },
 });

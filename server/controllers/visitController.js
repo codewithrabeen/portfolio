@@ -1,10 +1,136 @@
 const Visit = require("../models/Visit");
+const Settings = require("../models/Settings");
+
+const DEFAULT_TIMEZONE = "Asia/Kathmandu";
+const VALID_VISIT_TYPES = new Set([
+  "portfolio_visit",
+  "section_view",
+]);
+
+const normalizePath = (value) => {
+  if (typeof value !== "string") return "/";
+
+  const trimmed = value.trim();
+
+  if (!trimmed.startsWith("/")) return "/";
+
+  return trimmed.slice(0, 120) || "/";
+};
+
+const normalizeVisitType = (value) => {
+  return VALID_VISIT_TYPES.has(value)
+    ? value
+    : "portfolio_visit";
+};
+
+const getConfiguredTimezone = async () => {
+  try {
+    const settings = await Settings.findOne().select(
+      "timezone"
+    );
+
+    return settings?.timezone || DEFAULT_TIMEZONE;
+  } catch {
+    return DEFAULT_TIMEZONE;
+  }
+};
+
+const getDateParts = (date, timeZone) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const map = Object.fromEntries(
+    parts.map((part) => [part.type, part.value])
+  );
+
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+  };
+};
+
+const getTimeZoneOffsetMs = (date, timeZone) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const map = Object.fromEntries(
+    parts.map((part) => [part.type, part.value])
+  );
+
+  const asUtc = Date.UTC(
+    Number(map.year),
+    Number(map.month) - 1,
+    Number(map.day),
+    Number(map.hour),
+    Number(map.minute),
+    Number(map.second)
+  );
+
+  return asUtc - date.getTime();
+};
+
+const zonedStartOfDayToUtc = (parts, timeZone) => {
+  const utcGuess = new Date(
+    Date.UTC(parts.year, parts.month - 1, parts.day)
+  );
+
+  const offset = getTimeZoneOffsetMs(
+    utcGuess,
+    timeZone
+  );
+
+  let utcDate = new Date(utcGuess.getTime() - offset);
+  const adjustedOffset = getTimeZoneOffsetMs(
+    utcDate,
+    timeZone
+  );
+
+  if (adjustedOffset !== offset) {
+    utcDate = new Date(
+      utcGuess.getTime() - adjustedOffset
+    );
+  }
+
+  return utcDate;
+};
+
+const shiftDateParts = (parts, days) => {
+  const shifted = new Date(
+    Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day + days
+    )
+  );
+
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  };
+};
 
 const createVisit = async (req, res) => {
   try {
     await Visit.create({
-      path: req.body.path || "/",
-      userAgent: req.headers["user-agent"] || "",
+      path: normalizePath(req.body.path),
+      type: normalizeVisitType(req.body.type),
+      userAgent: String(
+        req.headers["user-agent"] || ""
+      ).slice(0, 300),
       // We intentionally do not store the visitor's IP address.
     });
 
@@ -23,30 +149,47 @@ const createVisit = async (req, res) => {
 
 const getVisitStats = async (req, res) => {
   try {
+    const timezone = await getConfiguredTimezone();
     const now = new Date();
+    const todayParts = getDateParts(now, timezone);
 
-    // Start of today
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
-
-    // Start of week — Sunday
-    const startOfWeek = new Date(startOfToday);
-    startOfWeek.setDate(
-      startOfWeek.getDate() - startOfWeek.getDay()
+    const startOfToday = zonedStartOfDayToUtc(
+      todayParts,
+      timezone
     );
 
-    // Start of month
-    const startOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1
+    const startOfTomorrow = zonedStartOfDayToUtc(
+      shiftDateParts(todayParts, 1),
+      timezone
     );
 
-    // Start of previous 7 days
-    const startOfLast7Days = new Date(startOfToday);
-    startOfLast7Days.setDate(
-      startOfLast7Days.getDate() - 6
+    const startOfLast7Days = zonedStartOfDayToUtc(
+      shiftDateParts(todayParts, -6),
+      timezone
     );
+
+    const startOfMonth = zonedStartOfDayToUtc(
+      {
+        year: todayParts.year,
+        month: todayParts.month,
+        day: 1,
+      },
+      timezone
+    );
+
+    const portfolioVisitMatch = {
+      $or: [
+        {
+          type: "portfolio_visit",
+        },
+        {
+          type: {
+            $exists: false,
+          },
+          path: "/",
+        },
+      ],
+    };
 
     const [
       totalViews,
@@ -56,36 +199,39 @@ const getVisitStats = async (req, res) => {
       dailyViews,
       popularPages,
     ] = await Promise.all([
-      // Lifetime views
-      Visit.countDocuments(),
+      Visit.countDocuments(portfolioVisitMatch),
 
-      // Today
       Visit.countDocuments({
+        ...portfolioVisitMatch,
         createdAt: {
           $gte: startOfToday,
+          $lt: startOfTomorrow,
         },
       }),
 
-      // This week
       Visit.countDocuments({
+        ...portfolioVisitMatch,
         createdAt: {
-          $gte: startOfWeek,
+          $gte: startOfLast7Days,
+          $lt: startOfTomorrow,
         },
       }),
 
-      // This month
       Visit.countDocuments({
+        ...portfolioVisitMatch,
         createdAt: {
           $gte: startOfMonth,
+          $lt: startOfTomorrow,
         },
       }),
 
-      // Last 7 days
       Visit.aggregate([
         {
           $match: {
+            ...portfolioVisitMatch,
             createdAt: {
               $gte: startOfLast7Days,
+              $lt: startOfTomorrow,
             },
           },
         },
@@ -95,6 +241,7 @@ const getVisitStats = async (req, res) => {
               $dateToString: {
                 format: "%Y-%m-%d",
                 date: "$createdAt",
+                timezone,
               },
             },
             views: {
@@ -109,8 +256,10 @@ const getVisitStats = async (req, res) => {
         },
       ]),
 
-      // Most visited pages
       Visit.aggregate([
+        {
+          $match: portfolioVisitMatch,
+        },
         {
           $group: {
             _id: "$path",
@@ -132,6 +281,7 @@ const getVisitStats = async (req, res) => {
 
     res.json({
       success: true,
+      timezone,
       totalViews,
       todayViews,
       weekViews,

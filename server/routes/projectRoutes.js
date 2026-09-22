@@ -6,21 +6,34 @@ const {
   createProject,
   updateProject,
   deleteProject,
+  getAllProjects,
 } = require("../controllers/projectController");
 
 const protect = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/adminMiddleware");
 const upload = require("../middleware/uploadMiddleware");
 
 const router = express.Router();
 
 // Public
 router.get("/", getProjects);
+
+// Admin
+router.get(
+  "/all",
+  protect,
+  requireAdmin,
+  getAllProjects
+);
+
+// Public
 router.get("/:id", getProject);
 
 // Admin
 router.post(
   "/",
   protect,
+  requireAdmin,
   upload.single("image"),
   createProject
 );
@@ -28,6 +41,7 @@ router.post(
 router.put(
   "/:id",
   protect,
+  requireAdmin,
   upload.single("image"),
   updateProject
 );
@@ -35,7 +49,8 @@ router.put(
 router.delete(
   "/:id",
   protect,
+  requireAdmin,
   deleteProject
 );
 
-module.exports = router;  
+module.exports = router;

@@ -453,6 +453,7 @@ function Skills() {
                 className="modal-close"
                 onClick={closeModal}
                 disabled={saving}
+                aria-label="Close skill form"
               >
                 ×
               </button>

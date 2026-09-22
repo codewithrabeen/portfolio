@@ -1,9 +1,6 @@
 const Profile = require("../models/Profile");
 const cloudinary = require("../config/cloudinary");
 
-/**
- * Upload a buffer directly to Cloudinary.
- */
 const uploadToCloudinary = (fileBuffer, options = {}) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
@@ -21,10 +18,59 @@ const uploadToCloudinary = (fileBuffer, options = {}) => {
   });
 };
 
-// ============================================================
-// GET PROFILE
+const deleteCloudinaryAsset = async (
+  publicId,
+  resourceType = "image"
+) => {
+  if (!publicId) return;
+
+  try {
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType,
+    });
+  } catch (error) {
+    console.error(
+      "Cloudinary profile asset cleanup failed:",
+      error.message
+    );
+  }
+};
+
+const readString = (body, field, fallback = "") => {
+  if (body[field] === undefined) {
+    return fallback;
+  }
+
+  return String(body[field]).trim();
+};
+
+const readLowerString = (body, field, fallback = "") => {
+  return readString(body, field, fallback).toLowerCase();
+};
+
+const readBoolean = (body, field, fallback) => {
+  if (body[field] === undefined) {
+    return fallback;
+  }
+
+  return body[field] === true || body[field] === "true";
+};
+
+const readNonNegativeNumber = (body, field, fallback = 0) => {
+  if (body[field] === undefined || body[field] === "") {
+    return fallback;
+  }
+
+  const parsed = Number(body[field]);
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+
+  return parsed;
+};
+
 // Public
-// ============================================================
 const getProfile = async (req, res) => {
   try {
     const profile = await Profile.findOne();
@@ -50,32 +96,29 @@ const getProfile = async (req, res) => {
   }
 };
 
-// ============================================================
-// CREATE / UPDATE PROFILE
-// Admin protected route
-// ============================================================
+// Admin
 const updateProfile = async (req, res) => {
+  let uploadedProfileImage = null;
+  let uploadedResume = null;
+
   try {
-    // --------------------------------------------------------
-    // Find existing profile
-    // --------------------------------------------------------
     let profile = await Profile.findOne();
 
-    // --------------------------------------------------------
-    // Preserve existing uploaded files
-    // --------------------------------------------------------
     let profileImage = profile?.profileImage || "";
+    let profileImagePublicId =
+      profile?.profileImagePublicId || "";
     let resumeUrl = profile?.resumeUrl || "";
+    let resumePublicId = profile?.resumePublicId || "";
 
-    // ========================================================
-    // PROFILE IMAGE UPLOAD
-    // ========================================================
+    const oldProfileImagePublicId =
+      profile?.profileImagePublicId || "";
+    const oldResumePublicId =
+      profile?.resumePublicId || "";
+
     const imageFile = req.files?.profileImage?.[0];
 
     if (imageFile) {
-      console.log("Uploading profile image to Cloudinary...");
-
-      const imageResult = await uploadToCloudinary(
+      uploadedProfileImage = await uploadToCloudinary(
         imageFile.buffer,
         {
           folder: "portfolio/profile",
@@ -83,227 +126,214 @@ const updateProfile = async (req, res) => {
         }
       );
 
-      profileImage = imageResult.secure_url;
-
-      console.log(
-        "Profile image uploaded:",
-        profileImage
-      );
+      profileImage = uploadedProfileImage.secure_url;
+      profileImagePublicId = uploadedProfileImage.public_id;
     }
 
-    // ========================================================
-    // RESUME PDF UPLOAD
-    // ========================================================
     const resumeFile = req.files?.resume?.[0];
 
     if (resumeFile) {
-      console.log("Uploading resume PDF to Cloudinary...");
-
- const resumeResult = await uploadToCloudinary(
-  resumeFile.buffer,
-  {
-    folder: "portfolio/resumes",
-    resource_type: "raw",
-    public_id: `resume-${Date.now()}`,
-    format: "pdf",
-    overwrite: true,
-  }
-);
-
-      resumeUrl = resumeResult.secure_url;
-
-      console.log(
-        "Resume uploaded:",
-        resumeUrl
+      uploadedResume = await uploadToCloudinary(
+        resumeFile.buffer,
+        {
+          folder: "portfolio/resumes",
+          resource_type: "raw",
+          public_id: `resume-${Date.now()}`,
+          format: "pdf",
+          overwrite: true,
+        }
       );
-    }
 
-    // ========================================================
-    // REMOVE EXISTING RESUME
-    // ========================================================
-    if (
-      req.body.removeResume === "true" &&
-      !resumeFile
-    ) {
+      resumeUrl = uploadedResume.secure_url;
+      resumePublicId = uploadedResume.public_id;
+    } else if (req.body.removeResume === "true") {
       resumeUrl = "";
-
-      console.log("Resume removed from profile.");
+      resumePublicId = "";
     }
 
-    // ========================================================
-    // VISIBILITY SETTINGS
-    //
-    // IMPORTANT:
-    // Only change these values when they are actually
-    // included in the request.
-    //
-    // This prevents a resume/profile update from
-    // accidentally setting publicProfile to false.
-    // ========================================================
-
-    const publicProfile =
-      req.body.publicProfile !== undefined
-        ? req.body.publicProfile === "true"
-        : profile?.publicProfile ?? true;
-
-    const showEmail =
-      req.body.showEmail !== undefined
-        ? req.body.showEmail === "true"
-        : profile?.showEmail ?? true;
-
-    const showPhone =
-      req.body.showPhone !== undefined
-        ? req.body.showPhone === "true"
-        : profile?.showPhone ?? false;
-
-    // ========================================================
-    // PROFILE DATA
-    // ========================================================
     const profileData = {
-      // ------------------------------------------------------
-      // Identity
-      // ------------------------------------------------------
-      name:
-        req.body.name?.trim() || "",
-
-      title:
-        req.body.title?.trim() || "",
-
-      bio:
-        req.body.bio?.trim() || "",
-
+      name: readString(
+        req.body,
+        "name",
+        profile?.name || ""
+      ),
+      title: readString(
+        req.body,
+        "title",
+        profile?.title || ""
+      ),
+      bio: readString(req.body, "bio", profile?.bio || ""),
       profileImage,
-
-      // ------------------------------------------------------
-      // Contact
-      // ------------------------------------------------------
-      email:
-        req.body.email?.trim().toLowerCase() || "",
-
-      phone:
-        req.body.phone?.trim() || "",
-
-      location:
-        req.body.location?.trim() || "",
-
-      // ------------------------------------------------------
-      // Professional
-      // ------------------------------------------------------
-      availability:
-        req.body.availability?.trim() ||
+      profileImagePublicId,
+      email: readLowerString(
+        req.body,
+        "email",
+        profile?.email || ""
+      ),
+      phone: readString(
+        req.body,
+        "phone",
+        profile?.phone || ""
+      ),
+      location: readString(
+        req.body,
+        "location",
+        profile?.location || ""
+      ),
+      availability: readString(
+        req.body,
+        "availability",
         profile?.availability ||
-        "Available for opportunities",
-
-      currentlyLearning:
-        req.body.currentlyLearning?.trim() ||
-        profile?.currentlyLearning ||
-        "",
-
-      yearsExperience:
-        req.body.yearsExperience !== undefined &&
-        req.body.yearsExperience !== ""
-          ? Number(req.body.yearsExperience) >= 0
-            ? Number(req.body.yearsExperience)
-            : 0
-          : profile?.yearsExperience ?? 0,
-
-      projectsCompleted:
-        req.body.projectsCompleted !== undefined &&
-        req.body.projectsCompleted !== ""
-          ? Number(req.body.projectsCompleted) >= 0
-            ? Number(req.body.projectsCompleted)
-            : 0
-          : profile?.projectsCompleted ?? 0,
-
-      clientsCount:
-        req.body.clientsCount !== undefined &&
-        req.body.clientsCount !== ""
-          ? Number(req.body.clientsCount) >= 0
-            ? Number(req.body.clientsCount)
-            : 0
-          : profile?.clientsCount ?? 0,
-
-      // ------------------------------------------------------
-      // Links
-      // ------------------------------------------------------
-      github:
-        req.body.github?.trim() ||
-        profile?.github ||
-        "",
-
-      linkedin:
-        req.body.linkedin?.trim() ||
-        profile?.linkedin ||
-        "",
-
-      website:
-        req.body.website?.trim() ||
-        profile?.website ||
-        "",
-
-      // ------------------------------------------------------
-      // Resume
-      // ------------------------------------------------------
+          "Available for opportunities"
+      ),
+      currentlyLearning: readString(
+        req.body,
+        "currentlyLearning",
+        profile?.currentlyLearning || ""
+      ),
+      yearsExperience: readNonNegativeNumber(
+        req.body,
+        "yearsExperience",
+        profile?.yearsExperience ?? 0
+      ),
+      projectsCompleted: readNonNegativeNumber(
+        req.body,
+        "projectsCompleted",
+        profile?.projectsCompleted ?? 0
+      ),
+      clientsCount: readNonNegativeNumber(
+        req.body,
+        "clientsCount",
+        profile?.clientsCount ?? 0
+      ),
+      github: readString(
+        req.body,
+        "github",
+        profile?.github || ""
+      ),
+      linkedin: readString(
+        req.body,
+        "linkedin",
+        profile?.linkedin || ""
+      ),
+      website: readString(
+        req.body,
+        "website",
+        profile?.website || ""
+      ),
       resumeUrl,
-
-      // ------------------------------------------------------
-      // Visibility
-      // ------------------------------------------------------
-      publicProfile,
-      showEmail,
-      showPhone,
-
-      // ------------------------------------------------------
-      // SEO
-      // ------------------------------------------------------
-      seoTitle:
-        req.body.seoTitle?.trim() ||
-        profile?.seoTitle ||
-        "",
-
-      seoDescription:
-        req.body.seoDescription?.trim() ||
-        profile?.seoDescription ||
-        "",
+      resumePublicId,
+      publicProfile: readBoolean(
+        req.body,
+        "publicProfile",
+        profile?.publicProfile ?? true
+      ),
+      showEmail: readBoolean(
+        req.body,
+        "showEmail",
+        profile?.showEmail ?? true
+      ),
+      showPhone: readBoolean(
+        req.body,
+        "showPhone",
+        profile?.showPhone ?? false
+      ),
+      seoTitle: readString(
+        req.body,
+        "seoTitle",
+        profile?.seoTitle || ""
+      ),
+      seoDescription: readString(
+        req.body,
+        "seoDescription",
+        profile?.seoDescription || ""
+      ),
     };
 
-    // ========================================================
-    // SAVE PROFILE
-    // ========================================================
+    if (!profileData.name || !profileData.title) {
+      if (uploadedProfileImage?.public_id) {
+        await deleteCloudinaryAsset(
+          uploadedProfileImage.public_id,
+          "image"
+        );
+      }
+
+      if (uploadedResume?.public_id) {
+        await deleteCloudinaryAsset(
+          uploadedResume.public_id,
+          "raw"
+        );
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: "Name and title are required",
+      });
+    }
+
     if (profile) {
       Object.assign(profile, profileData);
-
       await profile.save();
     } else {
       profile = await Profile.create(profileData);
     }
 
-    // ========================================================
-    // RESPONSE
-    // ========================================================
+    if (
+      uploadedProfileImage?.public_id &&
+      oldProfileImagePublicId &&
+      oldProfileImagePublicId !==
+        uploadedProfileImage.public_id
+    ) {
+      await deleteCloudinaryAsset(
+        oldProfileImagePublicId,
+        "image"
+      );
+    }
+
+    if (
+      oldResumePublicId &&
+      (uploadedResume?.public_id ||
+        req.body.removeResume === "true") &&
+      oldResumePublicId !== uploadedResume?.public_id
+    ) {
+      await deleteCloudinaryAsset(
+        oldResumePublicId,
+        "raw"
+      );
+    }
+
     return res.status(200).json({
       success: true,
       message: "Profile updated successfully",
       profile,
     });
   } catch (error) {
-    console.error(
-      "Update profile error:",
-      error
-    );
+    if (uploadedProfileImage?.public_id) {
+      await deleteCloudinaryAsset(
+        uploadedProfileImage.public_id,
+        "image"
+      );
+    }
 
-    return res.status(500).json({
+    if (uploadedResume?.public_id) {
+      await deleteCloudinaryAsset(
+        uploadedResume.public_id,
+        "raw"
+      );
+    }
+
+    console.error("Update profile error:", error);
+
+    return res.status(error.name === "ValidationError" ? 400 : 500).json({
       success: false,
       message:
-        error.message ||
-        "Failed to update profile",
+        error.name === "ValidationError"
+          ? "Please check the profile details"
+          : "Failed to update profile",
     });
   }
 };
 
-// ============================================================
-// EXPORTS
-// ============================================================
 module.exports = {
   getProfile,
   updateProfile,

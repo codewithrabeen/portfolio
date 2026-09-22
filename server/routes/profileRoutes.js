@@ -6,6 +6,7 @@ const {
 } = require("../controllers/profileController");
 
 const protect = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/adminMiddleware");
 
 const upload = require("../middleware/uploadMiddleware");
 
@@ -18,6 +19,7 @@ router.get("/", getProfile);
 router.put(
   "/",
   protect,
+  requireAdmin,
   upload.fields([
     {
       name: "profileImage",

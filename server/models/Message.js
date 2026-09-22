@@ -6,6 +6,8 @@ const messageSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      minlength: 2,
+      maxlength: 80,
     },
 
     email: {
@@ -13,18 +15,22 @@ const messageSchema = new mongoose.Schema(
       required: true,
       trim: true,
       lowercase: true,
+      maxlength: 120,
     },
 
     subject: {
       type: String,
       default: "",
       trim: true,
+      maxlength: 120,
     },
 
     message: {
       type: String,
       required: true,
       trim: true,
+      minlength: 10,
+      maxlength: 2000,
     },
 
     read: {

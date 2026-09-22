@@ -30,6 +30,149 @@ const readList = (response, key) => {
   return [];
 };
 
+const normalizePublicSiteUrl = (value) => {
+  if (!value) return "";
+
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    url.search = "";
+
+    return url.href.replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+};
+
+const PUBLIC_SITE_URL = normalizePublicSiteUrl(
+  import.meta.env.VITE_PUBLIC_SITE_URL
+);
+
+const toAbsolutePublicUrl = (value) => {
+  if (!value) return "";
+
+  try {
+    return new URL(value).href;
+  } catch {
+    if (PUBLIC_SITE_URL && value.startsWith("/")) {
+      return `${PUBLIC_SITE_URL}${value}`;
+    }
+
+    return value;
+  }
+};
+
+const setMetaContent = (selector, content) => {
+  const element = document.querySelector(selector);
+
+  if (element && content) {
+    element.content = content;
+  }
+};
+
+const syncDocumentMetadata = (settings, profile) => {
+  const title =
+    settings?.siteTitle ||
+    profile?.seoTitle ||
+    `${profile?.name || "Rabeen"} — ${
+      profile?.title || "Full Stack Developer"
+    }`;
+
+  const description =
+    settings?.seoDescription ||
+    profile?.seoDescription ||
+    profile?.bio ||
+    `${profile?.name || "Rabeen"} — ${
+      profile?.title || "Full Stack Developer"
+    }`;
+
+  const image = toAbsolutePublicUrl(
+    settings?.ogImage ||
+      profile?.profileImage ||
+      import.meta.env.VITE_PUBLIC_OG_IMAGE_URL ||
+      "/og-image.png"
+  );
+
+  document.title = title;
+
+  setMetaContent('meta[name="description"]', description);
+  setMetaContent(
+    'meta[name="keywords"]',
+    settings?.seoKeywords || ""
+  );
+  setMetaContent('meta[property="og:title"]', title);
+  setMetaContent(
+    'meta[property="og:description"]',
+    description
+  );
+  setMetaContent('meta[property="og:image"]', image);
+  setMetaContent('meta[name="twitter:title"]', title);
+  setMetaContent(
+    'meta[name="twitter:description"]',
+    description
+  );
+  setMetaContent('meta[name="twitter:image"]', image);
+
+  if (PUBLIC_SITE_URL) {
+    let canonical = document.querySelector(
+      'link[rel="canonical"]'
+    );
+
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      document.head.appendChild(canonical);
+    }
+
+    canonical.href = PUBLIC_SITE_URL;
+    setMetaContent(
+      'meta[property="og:url"]',
+      PUBLIC_SITE_URL
+    );
+  }
+};
+
+const VISIT_SESSION_KEY =
+  "portfolio.visitRecorded.v1";
+
+let visitRecordedThisPage = false;
+
+const recordPortfolioVisit = () => {
+  if (visitRecordedThisPage) return;
+
+  let storage = null;
+
+  try {
+    storage = window.sessionStorage;
+
+    if (storage.getItem(VISIT_SESSION_KEY) === "true") {
+      visitRecordedThisPage = true;
+      return;
+    }
+
+    storage.setItem(VISIT_SESSION_KEY, "true");
+  } catch {
+    storage = null;
+  }
+
+  visitRecordedThisPage = true;
+
+  api
+    .post("/visits", {
+      path: "/",
+      type: "portfolio_visit",
+    })
+    .catch(() => {
+      visitRecordedThisPage = false;
+
+      try {
+        storage?.removeItem(VISIT_SESSION_KEY);
+      } catch {
+        // Ignore storage failures; analytics should never break the page.
+      }
+    });
+};
+
 
 /* =========================
    ICONS
@@ -326,151 +469,7 @@ function App() {
 
         setSettings(nextSettings);
 
-        /* =========================
-           DOCUMENT TITLE
-        ========================= */
-
-        document.title =
-          nextSettings?.siteTitle ||
-          nextProfile.seoTitle ||
-          `${nextProfile.name || "Rabeen"} — ${
-            nextProfile.title || "Full Stack Developer"
-          }`;
-
-        /* =========================
-           SEO DESCRIPTION
-        ========================= */
-
-        const description =
-          document.querySelector(
-            'meta[name="description"]'
-          );
-
-        if (description) {
-          description.content =
-            nextSettings?.seoDescription ||
-            nextProfile.seoDescription ||
-            nextProfile.bio ||
-            `${nextProfile.name || "Rabeen"} — ${
-              nextProfile.title ||
-              "Full Stack Developer"
-            }`;
-        }
-
-        /* =========================
-           SEO KEYWORDS
-        ========================= */
-
-        const keywords =
-          document.querySelector(
-            'meta[name="keywords"]'
-          );
-
-        if (keywords) {
-          keywords.content =
-            nextSettings?.seoKeywords ||
-            "";
-        }
-
-        /* =========================
-           OPEN GRAPH TITLE
-        ========================= */
-
-        const ogTitle =
-          document.querySelector(
-            'meta[property="og:title"]'
-          );
-
-        if (ogTitle) {
-          ogTitle.content =
-            nextSettings?.siteTitle ||
-            nextProfile.seoTitle ||
-            nextProfile.name ||
-            "Rabeen Sharma";
-        }
-
-        /* =========================
-           OPEN GRAPH DESCRIPTION
-        ========================= */
-
-        const ogDescription =
-          document.querySelector(
-            'meta[property="og:description"]'
-          );
-
-        if (ogDescription) {
-          ogDescription.content =
-            nextSettings?.seoDescription ||
-            nextProfile.seoDescription ||
-            nextProfile.bio ||
-            "";
-        }
-
-        /* =========================
-           OPEN GRAPH IMAGE
-        ========================= */
-
-        const ogImage =
-          document.querySelector(
-            'meta[property="og:image"]'
-          );
-
-        if (ogImage) {
-          ogImage.content =
-            nextSettings?.ogImage ||
-            nextProfile.profileImage ||
-            "/favicon.png";
-        }
-
-        /* =========================
-           TWITTER TITLE
-        ========================= */
-
-        const twitterTitle =
-          document.querySelector(
-            'meta[name="twitter:title"]'
-          );
-
-        if (twitterTitle) {
-          twitterTitle.content =
-            nextSettings?.siteTitle ||
-            nextProfile.seoTitle ||
-            nextProfile.name ||
-            "Rabeen Sharma";
-        }
-
-        /* =========================
-           TWITTER DESCRIPTION
-        ========================= */
-
-        const twitterDescription =
-          document.querySelector(
-            'meta[name="twitter:description"]'
-          );
-
-        if (twitterDescription) {
-          twitterDescription.content =
-            nextSettings?.seoDescription ||
-            nextProfile.seoDescription ||
-            nextProfile.bio ||
-            "";
-        }
-
-        /* =========================
-           TWITTER IMAGE
-        ========================= */
-
-        const twitterImage =
-          document.querySelector(
-            'meta[name="twitter:image"]'
-          );
-
-        if (twitterImage) {
-          twitterImage.content =
-            nextSettings?.ogImage ||
-            nextProfile.profileImage ||
-            "/favicon.png";
-        }
+        syncDocumentMetadata(nextSettings, nextProfile);
       } catch (settingsError) {
         console.warn(
           "Settings could not be loaded. Using profile defaults.",
@@ -479,27 +478,7 @@ function App() {
 
         setSettings(null);
 
-        document.title =
-          nextProfile.seoTitle ||
-          `${nextProfile.name || "Rabeen"} — ${
-            nextProfile.title ||
-            "Full Stack Developer"
-          }`;
-
-        const description =
-          document.querySelector(
-            'meta[name="description"]'
-          );
-
-        if (description) {
-          description.content =
-            nextProfile.seoDescription ||
-            nextProfile.bio ||
-            `${nextProfile.name || "Rabeen"} — ${
-              nextProfile.title ||
-              "Full Stack Developer"
-            }`;
-        }
+        syncDocumentMetadata(null, nextProfile);
       }
     } catch (err) {
       console.error(
@@ -587,6 +566,24 @@ function App() {
   }, [settings]);
 
   /* =========================
+     PORTFOLIO VISIT
+  ========================= */
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (
+      !profile ||
+      profile.publicProfile === false ||
+      settings?.maintenanceMode === true
+    ) {
+      return;
+    }
+
+    recordPortfolioVisit();
+  }, [loading, profile, settings?.maintenanceMode]);
+
+  /* =========================
      SECTION OBSERVER
   ========================= */
 
@@ -614,12 +611,6 @@ function App() {
             ([entry]) => {
               if (entry.isIntersecting) {
                 setActive(id);
-
-                api
-                  .post("/visits", {
-                    path: `/${id}`,
-                  })
-                  .catch(() => {});
               }
             },
             {
@@ -1943,12 +1934,21 @@ function App() {
 
           <form
             className="contact-form"
+            aria-busy={sending}
             onSubmit={
               submitContact
             }
           >
             <div className="form-row">
+              <label
+                className="sr-only"
+                htmlFor="contact-name"
+              >
+                Name
+              </label>
+
               <input
+                id="contact-name"
                 required
                 name="name"
                 placeholder="Your name"
@@ -1964,7 +1964,15 @@ function App() {
                 }
               />
 
+              <label
+                className="sr-only"
+                htmlFor="contact-email"
+              >
+                Email address
+              </label>
+
               <input
+                id="contact-email"
                 required
                 type="email"
                 name="email"
@@ -1982,7 +1990,15 @@ function App() {
               />
             </div>
 
+            <label
+              className="sr-only"
+              htmlFor="contact-subject"
+            >
+              Subject
+            </label>
+
             <input
+              id="contact-subject"
               name="subject"
               placeholder="Subject"
               value={
@@ -1998,7 +2014,15 @@ function App() {
               }
             />
 
+            <label
+              className="sr-only"
+              htmlFor="contact-message"
+            >
+              Message
+            </label>
+
             <textarea
+              id="contact-message"
               required
               rows="6"
               name="message"
@@ -2025,6 +2049,14 @@ function App() {
                     ? "success"
                     : "error"
                 }`}
+                role={
+                  message.includes(
+                    "successfully"
+                  )
+                    ? "status"
+                    : "alert"
+                }
+                aria-live="polite"
               >
                 {message}
               </div>
@@ -2274,4 +2306,3 @@ function showContactEmail(
 }
 
 export default App;
-

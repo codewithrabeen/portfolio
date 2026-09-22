@@ -28,11 +28,7 @@ function Settings() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
+  async function loadSettings() {
     try {
       setLoading(true);
       setError("");
@@ -53,7 +49,11 @@ function Settings() {
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -178,9 +178,10 @@ function Settings() {
 
           <div className="settings-grid">
             <div className="settings-field">
-              <label>Portfolio Name</label>
+              <label htmlFor="portfolioName">Portfolio Name</label>
 
               <input
+                id="portfolioName"
                 name="portfolioName"
                 value={settings.portfolioName}
                 onChange={handleChange}
@@ -193,9 +194,10 @@ function Settings() {
             </div>
 
             <div className="settings-field">
-              <label>Site Title</label>
+              <label htmlFor="siteTitle">Site Title</label>
 
               <input
+                id="siteTitle"
                 name="siteTitle"
                 value={settings.siteTitle}
                 onChange={handleChange}
@@ -208,9 +210,10 @@ function Settings() {
             </div>
 
             <div className="settings-field">
-              <label>Contact Email</label>
+              <label htmlFor="settingsEmail">Contact Email</label>
 
               <input
+                id="settingsEmail"
                 type="email"
                 name="email"
                 value={settings.email}
@@ -224,9 +227,10 @@ function Settings() {
             </div>
 
             <div className="settings-field">
-              <label>Timezone</label>
+              <label htmlFor="timezone">Timezone</label>
 
               <select
+                id="timezone"
                 name="timezone"
                 value={settings.timezone}
                 onChange={handleChange}
@@ -254,9 +258,10 @@ function Settings() {
             </div>
 
             <div className="settings-field">
-              <label>Language</label>
+              <label htmlFor="language">Language</label>
 
               <select
+                id="language"
                 name="language"
                 value={settings.language}
                 onChange={handleChange}
@@ -294,9 +299,10 @@ function Settings() {
 
           <div className="settings-grid">
             <div className="settings-field">
-              <label>Theme</label>
+              <label htmlFor="theme">Theme</label>
 
               <select
+                id="theme"
                 name="theme"
                 value={settings.theme}
                 onChange={handleChange}
@@ -316,10 +322,11 @@ function Settings() {
             </div>
 
             <div className="settings-field">
-              <label>Accent Color</label>
+              <label htmlFor="accentColor">Accent Color</label>
 
               <div className="color-control">
                 <input
+                  id="accentColor"
                   type="color"
                   name="accentColor"
                   value={settings.accentColor}
@@ -327,7 +334,9 @@ function Settings() {
                 />
 
                 <input
+                  id="accentColorHex"
                   type="text"
+                  aria-label="Accent color hex value"
                   value={settings.accentColor}
                   onChange={(event) =>
                     setSettings((current) => ({
@@ -355,6 +364,7 @@ function Settings() {
                 <input
                   type="checkbox"
                   name="maintenanceMode"
+                  aria-label="Maintenance Mode"
                   checked={settings.maintenanceMode}
                   onChange={handleChange}
                 />
@@ -385,7 +395,7 @@ function Settings() {
           </div>
 
           <div className="notification-list">
-            <label className="notification-item">
+            <div className="notification-item">
               <div>
                 <strong>Email Notifications</strong>
                 <p>
@@ -397,14 +407,15 @@ function Settings() {
                 <input
                   type="checkbox"
                   name="emailNotifications"
+                  aria-label="Email Notifications"
                   checked={settings.emailNotifications}
                   onChange={handleChange}
                 />
                 <span />
               </label>
-            </label>
+            </div>
 
-            <label className="notification-item">
+            <div className="notification-item">
               <div>
                 <strong>Message Notifications</strong>
                 <p>
@@ -417,6 +428,7 @@ function Settings() {
                 <input
                   type="checkbox"
                   name="messageNotifications"
+                  aria-label="Message Notifications"
                   checked={
                     settings.messageNotifications
                   }
@@ -424,9 +436,9 @@ function Settings() {
                 />
                 <span />
               </label>
-            </label>
+            </div>
 
-            <label className="notification-item">
+            <div className="notification-item">
               <div>
                 <strong>Project Notifications</strong>
                 <p>
@@ -439,6 +451,7 @@ function Settings() {
                 <input
                   type="checkbox"
                   name="projectNotifications"
+                  aria-label="Project Notifications"
                   checked={
                     settings.projectNotifications
                   }
@@ -446,7 +459,7 @@ function Settings() {
                 />
                 <span />
               </label>
-            </label>
+            </div>
           </div>
         </section>
 
@@ -471,9 +484,10 @@ function Settings() {
 
           <div className="settings-grid">
             <div className="settings-field full">
-              <label>Meta Description</label>
+              <label htmlFor="seoDescription">Meta Description</label>
 
               <textarea
+                id="seoDescription"
                 name="seoDescription"
                 value={settings.seoDescription}
                 onChange={handleChange}
@@ -489,9 +503,10 @@ function Settings() {
             </div>
 
             <div className="settings-field full">
-              <label>SEO Keywords</label>
+              <label htmlFor="seoKeywords">SEO Keywords</label>
 
               <input
+                id="seoKeywords"
                 name="seoKeywords"
                 value={settings.seoKeywords}
                 onChange={handleChange}
@@ -504,9 +519,10 @@ function Settings() {
             </div>
 
             <div className="settings-field full">
-              <label>OG Image URL</label>
+              <label htmlFor="ogImage">OG Image URL</label>
 
               <input
+                id="ogImage"
                 name="ogImage"
                 value={settings.ogImage}
                 onChange={handleChange}

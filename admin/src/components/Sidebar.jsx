@@ -84,6 +84,7 @@ function Sidebar() {
             <NavLink
               key={link.path}
               to={link.path}
+              aria-label={link.name}
               className={({ isActive }) =>
                 `nav-link ${isActive ? "active" : ""}`
               }
@@ -100,6 +101,7 @@ function Sidebar() {
 
         <NavLink
           to="/settings"
+          aria-label="Settings"
           className={({ isActive }) =>
             `nav-link ${isActive ? "active" : ""}`
           }
@@ -112,6 +114,8 @@ function Sidebar() {
       <button
         className="logout-button"
         onClick={handleLogout}
+        type="button"
+        aria-label="Logout"
       >
         <LogOut size={19} />
         <span>Logout</span>

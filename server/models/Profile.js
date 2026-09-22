@@ -28,6 +28,11 @@ const profileSchema = new mongoose.Schema(
       default: "",
     },
 
+    profileImagePublicId: {
+      type: String,
+      default: "",
+    },
+
     // =========================
     // Contact
     // =========================
@@ -105,6 +110,12 @@ const profileSchema = new mongoose.Schema(
     },
 
     resumeUrl: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    resumePublicId: {
       type: String,
       default: "",
       trim: true,

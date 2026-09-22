@@ -6,11 +6,19 @@ const visitSchema = new mongoose.Schema(
       type: String,
       default: "/",
       trim: true,
+      maxlength: 120,
+    },
+
+    type: {
+      type: String,
+      enum: ["portfolio_visit", "section_view"],
+      default: "portfolio_visit",
     },
 
     userAgent: {
       type: String,
       default: "",
+      maxlength: 300,
     },
   },
   {

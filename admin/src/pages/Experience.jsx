@@ -381,6 +381,7 @@ function Experience() {
                 className="modal-close"
                 onClick={closeModal}
                 disabled={saving}
+                aria-label="Close experience form"
               >
                 ×
               </button>

@@ -8,6 +8,7 @@ const {
 } = require("../controllers/messageController");
 
 const protect = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/adminMiddleware");
 
 const router = express.Router();
 
@@ -15,8 +16,18 @@ const router = express.Router();
 router.post("/", createMessage);
 
 // Admin
-router.get("/", protect, getMessages);
-router.patch("/:id/read", protect, toggleMessageRead);
-router.delete("/:id", protect, deleteMessage);
+router.get("/", protect, requireAdmin, getMessages);
+router.patch(
+  "/:id/read",
+  protect,
+  requireAdmin,
+  toggleMessageRead
+);
+router.delete(
+  "/:id",
+  protect,
+  requireAdmin,
+  deleteMessage
+);
 
 module.exports = router;

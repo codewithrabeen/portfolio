@@ -382,6 +382,7 @@ function Education() {
                 className="modal-close"
                 onClick={closeModal}
                 disabled={saving}
+                aria-label="Close education form"
               >
                 ×
               </button>

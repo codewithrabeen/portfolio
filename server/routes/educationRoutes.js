@@ -9,6 +9,7 @@ const {
 } = require("../controllers/educationController");
 
 const protect = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/adminMiddleware");
 
 const router = express.Router();
 
@@ -16,12 +17,17 @@ const router = express.Router();
 router.get("/", getEducations);
 
 // Admin
-router.get("/all", protect, getAllEducations);
+router.get(
+  "/all",
+  protect,
+  requireAdmin,
+  getAllEducations
+);
 
-router.post("/", protect, createEducation);
+router.post("/", protect, requireAdmin, createEducation);
 
-router.put("/:id", protect, updateEducation);
+router.put("/:id", protect, requireAdmin, updateEducation);
 
-router.delete("/:id", protect, deleteEducation);
+router.delete("/:id", protect, requireAdmin, deleteEducation);
 
 module.exports = router;

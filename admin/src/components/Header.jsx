@@ -10,7 +10,11 @@ function Header() {
       </div>
 
       <div className="header-right">
-        <button className="icon-button">
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="Notifications"
+        >
           <Bell size={19} />
         </button>
 

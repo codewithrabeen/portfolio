@@ -1,12 +1,14 @@
+const mongoose = require("mongoose");
+
 const Project = require("../models/Project");
 const cloudinary = require("../config/cloudinary");
 
-
-const uploadToCloudinary = (fileBuffer) => {
+const uploadProjectImage = (fileBuffer) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: "portfolio/projects",
+        resource_type: "image",
       },
       (error, result) => {
         if (error) {
@@ -21,11 +23,84 @@ const uploadToCloudinary = (fileBuffer) => {
   });
 };
 
+const deleteProjectImage = async (publicId) => {
+  if (!publicId) return;
 
-// Get all projects
+  try {
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: "image",
+    });
+  } catch (error) {
+    console.error(
+      "Cloudinary project image cleanup failed:",
+      error.message
+    );
+  }
+};
+
+const isValidObjectId = (id) =>
+  mongoose.Types.ObjectId.isValid(id);
+
+const parseTechnologies = (value, fallback = []) => {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((tech) => String(tech).trim()).filter(Boolean);
+  }
+
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((tech) => String(tech).trim())
+        .filter(Boolean);
+    }
+  } catch {
+    // Fall back to comma-separated values below.
+  }
+
+  return value
+    .split(",")
+    .map((tech) => tech.trim())
+    .filter(Boolean);
+};
+
+const parseBoolean = (value, fallback) => {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  return value === true || value === "true";
+};
+
+const readString = (value) => {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+};
+
+const validationErrorResponse = (res, message) => {
+  return res.status(400).json({
+    success: false,
+    message,
+  });
+};
+
+// Public - get published projects
 const getProjects = async (req, res) => {
   try {
-    const projects = await Project.find().sort({
+    const projects = await Project.find({
+      published: true,
+    }).sort({
       createdAt: -1,
     });
 
@@ -43,10 +118,41 @@ const getProjects = async (req, res) => {
   }
 };
 
-// Get single project
+// Admin - get all projects, including drafts
+const getAllProjects = async (req, res) => {
+  try {
+    const projects = await Project.find().sort({
+      createdAt: -1,
+    });
+
+    res.json({
+      success: true,
+      projects,
+    });
+  } catch (error) {
+    console.error("Get all projects error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch projects",
+    });
+  }
+};
+
+// Public - get one published project
 const getProject = async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id);
+    if (!isValidObjectId(req.params.id)) {
+      return validationErrorResponse(
+        res,
+        "Invalid project id"
+      );
+    }
+
+    const project = await Project.findOne({
+      _id: req.params.id,
+      published: true,
+    });
 
     if (!project) {
       return res.status(404).json({
@@ -69,41 +175,40 @@ const getProject = async (req, res) => {
   }
 };
 
-// Create project
+// Admin - create project
 const createProject = async (req, res) => {
+  let uploadedImage = null;
+
   try {
-    let imageUrl = "";
+    const title = readString(req.body.title);
+    const description = readString(req.body.description);
 
-    if (req.file) {
-      const result = await uploadToCloudinary(
-        req.file.buffer
+    if (!title || !description) {
+      return validationErrorResponse(
+        res,
+        "Project title and description are required"
       );
-
-      imageUrl = result.secure_url;
     }
 
-    let technologies = req.body.technologies || [];
-
-    if (typeof technologies === "string") {
-      try {
-        technologies = JSON.parse(technologies);
-      } catch {
-        technologies = technologies
-          .split(",")
-          .map((tech) => tech.trim())
-          .filter(Boolean);
-      }
+    if (req.file) {
+      uploadedImage = await uploadProjectImage(
+        req.file.buffer
+      );
     }
 
     const project = await Project.create({
-      title: req.body.title,
-      description: req.body.description,
-      image: imageUrl,
-      technologies,
-      githubUrl: req.body.githubUrl || "",
-      liveUrl: req.body.liveUrl || "",
-      featured: req.body.featured === "true",
-      published: req.body.published !== "false",
+      title,
+      description,
+      image: uploadedImage?.secure_url || "",
+      imagePublicId: uploadedImage?.public_id || "",
+      technologies: parseTechnologies(req.body.technologies),
+      githubUrl: readString(req.body.githubUrl),
+      liveUrl: readString(req.body.liveUrl),
+      featured: parseBoolean(req.body.featured, false),
+      published:
+        req.body.published === undefined
+          ? true
+          : parseBoolean(req.body.published, true),
     });
 
     res.status(201).json({
@@ -112,17 +217,34 @@ const createProject = async (req, res) => {
       project,
     });
   } catch (error) {
+    if (uploadedImage?.public_id) {
+      await deleteProjectImage(uploadedImage.public_id);
+    }
+
     console.error("Create project error:", error);
 
-    res.status(500).json({
+    res.status(error.name === "ValidationError" ? 400 : 500).json({
       success: false,
-      message: "Failed to create project",
+      message:
+        error.name === "ValidationError"
+          ? "Please check the project details"
+          : "Failed to create project",
     });
   }
 };
 
+// Admin - update project
 const updateProject = async (req, res) => {
+  let uploadedImage = null;
+
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return validationErrorResponse(
+        res,
+        "Invalid project id"
+      );
+    }
+
     const project = await Project.findById(
       req.params.id
     );
@@ -134,57 +256,57 @@ const updateProject = async (req, res) => {
       });
     }
 
-    let imageUrl = project.image;
+    const oldImagePublicId = project.imagePublicId;
 
     if (req.file) {
-      const result = await uploadToCloudinary(
+      uploadedImage = await uploadProjectImage(
         req.file.buffer
       );
 
-      imageUrl = result.secure_url;
+      project.image = uploadedImage.secure_url;
+      project.imagePublicId = uploadedImage.public_id;
     }
 
-    let technologies =
-      req.body.technologies ?? project.technologies;
-
-    if (typeof technologies === "string") {
-      try {
-        technologies = JSON.parse(technologies);
-      } catch {
-        technologies = technologies
-          .split(",")
-          .map((tech) => tech.trim())
-          .filter(Boolean);
-      }
+    if (req.body.title !== undefined) {
+      project.title = readString(req.body.title);
     }
 
-    project.title =
-      req.body.title ?? project.title;
-
-    project.description =
-      req.body.description ?? project.description;
-
-    project.image = imageUrl;
-
-    project.technologies = technologies;
-
-    project.githubUrl =
-      req.body.githubUrl ?? project.githubUrl;
-
-    project.liveUrl =
-      req.body.liveUrl ?? project.liveUrl;
-
-    if (req.body.featured !== undefined) {
-      project.featured =
-        req.body.featured === "true";
+    if (req.body.description !== undefined) {
+      project.description = readString(req.body.description);
     }
 
-    if (req.body.published !== undefined) {
-      project.published =
-        req.body.published !== "false";
+    project.technologies = parseTechnologies(
+      req.body.technologies,
+      project.technologies
+    );
+
+    if (req.body.githubUrl !== undefined) {
+      project.githubUrl = readString(req.body.githubUrl);
     }
+
+    if (req.body.liveUrl !== undefined) {
+      project.liveUrl = readString(req.body.liveUrl);
+    }
+
+    project.featured = parseBoolean(
+      req.body.featured,
+      project.featured
+    );
+
+    project.published = parseBoolean(
+      req.body.published,
+      project.published
+    );
 
     await project.save();
+
+    if (
+      uploadedImage?.public_id &&
+      oldImagePublicId &&
+      oldImagePublicId !== uploadedImage.public_id
+    ) {
+      await deleteProjectImage(oldImagePublicId);
+    }
 
     res.json({
       success: true,
@@ -192,19 +314,33 @@ const updateProject = async (req, res) => {
       project,
     });
   } catch (error) {
+    if (uploadedImage?.public_id) {
+      await deleteProjectImage(uploadedImage.public_id);
+    }
+
     console.error("Update project error:", error);
 
-    res.status(500).json({
+    res.status(error.name === "ValidationError" ? 400 : 500).json({
       success: false,
-      message: "Failed to update project",
+      message:
+        error.name === "ValidationError"
+          ? "Please check the project details"
+          : "Failed to update project",
     });
   }
 };
 
-// Delete project
+// Admin - delete project
 const deleteProject = async (req, res) => {
   try {
-    const project = await Project.findByIdAndDelete(
+    if (!isValidObjectId(req.params.id)) {
+      return validationErrorResponse(
+        res,
+        "Invalid project id"
+      );
+    }
+
+    const project = await Project.findById(
       req.params.id
     );
 
@@ -213,6 +349,14 @@ const deleteProject = async (req, res) => {
         success: false,
         message: "Project not found",
       });
+    }
+
+    const oldImagePublicId = project.imagePublicId;
+
+    await project.deleteOne();
+
+    if (oldImagePublicId) {
+      await deleteProjectImage(oldImagePublicId);
     }
 
     res.json({
@@ -231,6 +375,7 @@ const deleteProject = async (req, res) => {
 
 module.exports = {
   getProjects,
+  getAllProjects,
   getProject,
   createProject,
   updateProject,

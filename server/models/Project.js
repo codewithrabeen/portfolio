@@ -19,6 +19,11 @@ const projectSchema = new mongoose.Schema(
       default: "",
     },
 
+    imagePublicId: {
+      type: String,
+      default: "",
+    },
+
     technologies: {
       type: [String],
       default: [],

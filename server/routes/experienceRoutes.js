@@ -9,6 +9,7 @@ const {
 } = require("../controllers/experienceController");
 
 const protect = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/adminMiddleware");
 
 const router = express.Router();
 
@@ -16,12 +17,17 @@ const router = express.Router();
 router.get("/", getExperiences);
 
 // Admin
-router.get("/all", protect, getAllExperiences);
+router.get(
+  "/all",
+  protect,
+  requireAdmin,
+  getAllExperiences
+);
 
-router.post("/", protect, createExperience);
+router.post("/", protect, requireAdmin, createExperience);
 
-router.put("/:id", protect, updateExperience);
+router.put("/:id", protect, requireAdmin, updateExperience);
 
-router.delete("/:id", protect, deleteExperience);
+router.delete("/:id", protect, requireAdmin, deleteExperience);
 
 module.exports = router;

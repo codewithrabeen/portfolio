@@ -52,7 +52,7 @@ function Projects() {
       setLoading(true);
       setError("");
 
-      const response = await api.get("/projects");
+      const response = await api.get("/projects/all");
 
       setProjects(response.data.projects || []);
     } catch (error) {
@@ -680,6 +680,7 @@ function Projects() {
                           rel="noopener noreferrer"
                           className="project-icon-button"
                           title="Open GitHub"
+                          aria-label={`Open GitHub for ${project.title}`}
                         >
                           <GitBranch size={15} />
                         </a>
@@ -692,6 +693,7 @@ function Projects() {
                           rel="noopener noreferrer"
                           className="project-icon-button"
                           title="Open live project"
+                          aria-label={`Open live project for ${project.title}`}
                         >
                           <ExternalLink size={15} />
                         </a>

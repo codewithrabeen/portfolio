@@ -6,6 +6,7 @@ const {
 } = require("../controllers/visitController");
 
 const protect = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/adminMiddleware");
 
 const router = express.Router();
 
@@ -13,6 +14,11 @@ const router = express.Router();
 router.post("/", createVisit);
 
 // Admin
-router.get("/stats", protect, getVisitStats);
+router.get(
+  "/stats",
+  protect,
+  requireAdmin,
+  getVisitStats
+);
 
 module.exports = router;

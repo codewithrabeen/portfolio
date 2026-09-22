@@ -24,16 +24,19 @@ const app = express();
 
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || "development";
+const isProduction = NODE_ENV === "production";
 
 // ======================================================
 // CLOUDINARY CONFIG CHECK
 // ======================================================
 
-console.log("Cloudinary config check:", {
-  cloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
-  apiKey: Boolean(process.env.CLOUDINARY_API_KEY),
-  apiSecret: Boolean(process.env.CLOUDINARY_API_SECRET),
-});
+if (!isProduction) {
+  console.log("Cloudinary config check:", {
+    cloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
+    apiKey: Boolean(process.env.CLOUDINARY_API_KEY),
+    apiSecret: Boolean(process.env.CLOUDINARY_API_SECRET),
+  });
+}
 
 // ======================================================
 // DATABASE
@@ -45,16 +48,45 @@ connectDB();
 // CORS
 // ======================================================
 
+const parseOrigins = (...values) => {
+  return values
+    .flatMap((value) =>
+      String(value || "")
+        .split(",")
+        .map((origin) => origin.trim())
+    )
+    .filter(Boolean)
+    .map((origin) => {
+      try {
+        return new URL(origin).origin;
+      } catch {
+        return origin.replace(/\/$/, "");
+      }
+    });
+};
+
 const allowedOrigins = [
-  process.env.CLIENT_URL,
-  process.env.ADMIN_URL,
+  ...parseOrigins(
+    process.env.CLIENT_URL,
+    process.env.ADMIN_URL,
+    process.env.CORS_ORIGINS
+  ),
 
   // Local development
   "http://localhost:5173",
   "http://localhost:5174",
-].filter(Boolean);
+];
 
-console.log("Allowed CORS origins:", allowedOrigins);
+const uniqueAllowedOrigins = [
+  ...new Set(allowedOrigins),
+];
+
+if (!isProduction) {
+  console.log(
+    "Allowed CORS origins:",
+    uniqueAllowedOrigins
+  );
+}
 
 app.use(
   cors({
@@ -65,14 +97,20 @@ app.use(
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(origin)) {
+      if (uniqueAllowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      console.log("Blocked CORS origin:", origin);
+      if (!isProduction) {
+        console.warn("Blocked CORS origin:", origin);
+      }
 
       return callback(
-        new Error(`CORS blocked for origin: ${origin}`)
+        new Error(
+          isProduction
+            ? "CORS origin not allowed"
+            : `CORS blocked for origin: ${origin}`
+        )
       );
     },
     credentials: true,
@@ -83,7 +121,8 @@ app.use(
 // BODY PARSING
 // ======================================================
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
 
 // ======================================================
